@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: performance-lab
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:perflab}
+    username: ${DB_USER:perflab}
+    password: ${DB_PASSWORD:perflab}
+    hikari:
+      maximum-pool-size: 10
+  sql:
+    init:
+      mode: always   # runs schema.sql on startup: creates the table and seeds 1,000,000 rows once
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
