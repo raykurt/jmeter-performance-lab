@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: perflab
+      POSTGRES_USER: perflab
+      POSTGRES_PASSWORD: perflab
+    ports:
+      - "5432:5432"
