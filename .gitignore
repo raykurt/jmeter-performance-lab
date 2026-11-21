@@ -1,0 +1,6 @@
+target/
+results/
+reports/
+apache-jmeter-*/
+*.log
+.idea/
