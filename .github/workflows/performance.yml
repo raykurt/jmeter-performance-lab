@@ -56,6 +56,7 @@ jobs:
         run: |
           curl -sSfL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" | tar xz
           echo "$PWD/apache-jmeter-${JMETER_VERSION}/bin" >> "$GITHUB_PATH"
+          mkdir -p results reports
 
       - name: Warm-up run (results are not used)
         run: jmeter -n -t jmeter/person-api-load.jmx -l results/warmup.jtl -Jusers=2 -Jduration=10
