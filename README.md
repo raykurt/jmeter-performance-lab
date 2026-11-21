@@ -24,15 +24,21 @@ Everything runs in **GitHub Actions** on every push.
 
 ## Results
 
-The latest numbers are in the **Summary** page of each [GitHub Actions run](https://github.com/raykurt/jmeter-performance-lab/actions),
-and the full JMeter HTML dashboards are in the `jmeter-reports` artifact.
+Measured in GitHub Actions (10 concurrent users, 5 s ramp-up, 30 s per run). Full JMeter HTML dashboards are in the `jmeter-reports` artifact of each [run](https://github.com/raykurt/jmeter-performance-lab/actions).
 
-| Request | P95 before index | P95 after index |
-|---|---:|---:|
-| Search person by email | _from CI_ | _from CI_ |
-| Get person by id (baseline) | _from CI_ | _from CI_ |
+| Request | Run | Samples | Avg (ms) | P90 | P95 | P99 | Throughput (req/s) | Errors |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Search person by email | Before index | 771 | 356 | 595 | **644** | 763 | 25.6 | 0% |
+| Search person by email | After index | 85,822 | 2 | 3 | **3** | 5 | 2,867.5 | 0% |
+| Get person by id | Before index | 761 | 5 | 9 | 11 | 15 | 25.6 | 0% |
+| Get person by id | After index | 85,816 | 2 | 3 | 3 | 5 | 2,869.9 | 0% |
 
-Load profile: 10 concurrent users, 5 s ramp-up, 30 s per run.
+**Takeaways**
+
+- Email search P95 dropped from **644 ms to 3 ms** (about 200x faster).
+- Total throughput grew from **~51 to ~5,700 requests per second** (over 100x).
+- The fast `Get person by id` request was also stuck at 25.6 req/s before the fix: each virtual user runs both requests in a loop, so **one slow endpoint limited the capacity of the whole system**.
+- The performance gate (P95 < 200 ms after the fix) passed for both requests.
 
 ## Query plan
 
