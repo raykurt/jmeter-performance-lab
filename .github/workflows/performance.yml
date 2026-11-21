@@ -1,0 +1,91 @@
+name: Performance Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  JMETER_VERSION: 5.6.3
+  USERS: 10
+  DURATION: 30
+
+jobs:
+  jmeter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: perflab
+          POSTGRES_USER: perflab
+          POSTGRES_PASSWORD: perflab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U perflab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+
+      - name: Build the application
+        run: mvn -B -q package -DskipTests
+
+      - name: Start the application (seeds 1,000,000 rows on first start)
+        run: |
+          nohup java -jar target/performance-lab.jar > app.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8080/actuator/health > /dev/null; then echo "App is up"; exit 0; fi
+            sleep 2
+          done
+          echo "App did not start"; cat app.log; exit 1
+
+      - name: Install JMeter
+        run: |
+          curl -sSfL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" | tar xz
+          echo "$PWD/apache-jmeter-${JMETER_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Warm-up run (results are not used)
+        run: jmeter -n -t jmeter/person-api-load.jmx -l results/warmup.jtl -Jusers=2 -Jduration=10
+
+      - name: Load test BEFORE adding the index
+        run: jmeter -n -t jmeter/person-api-load.jmx -l results/before.jtl -e -o reports/before -Jusers=$USERS -Jduration=$DURATION
+
+      - name: Add the index on person.email
+        env:
+          PGPASSWORD: perflab
+        run: psql -h localhost -U perflab -d perflab -f sql/add-index.sql
+
+      - name: Load test AFTER adding the index
+        run: jmeter -n -t jmeter/person-api-load.jmx -l results/after.jtl -e -o reports/after -Jusers=$USERS -Jduration=$DURATION
+
+      - name: Compare results and check the performance gate
+        run: >
+          python3 scripts/summarize.py
+          --run "Before index=results/before.jtl"
+          --run "After index=results/after.jtl"
+          --gate "After index:Search person by email:p95:200"
+          --gate "After index:Get person by id:p95:200"
+
+      - name: Upload JMeter reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: jmeter-reports
+          path: |
+            reports/
+            results/
+            app.log
+          retention-days: 14
