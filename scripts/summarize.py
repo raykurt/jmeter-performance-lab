@@ -1,9 +1,11 @@
 """Summarizes JMeter .jtl (CSV) result files and compares runs.
 
 Usage:
-  python scripts/summarize.py --run "Before index=results/before.jtl" \
-                              --run "After index=results/after.jtl" \
+  python scripts/summarize.py --run "Before index=results/read-before.jtl,results/write-before.jtl" \
+                              --run "After index=results/read-after.jtl,results/write-after.jtl" \
                               --gate "After index:Search person by email:p95:200"
+
+A run can combine several .jtl files (comma separated), e.g. a read test and a write test.
 
 The gate fails the build (exit code 1) when the metric is above the limit in milliseconds.
 """
@@ -23,11 +25,12 @@ def percentile(sorted_values, pct):
     return sorted_values[rank - 1]
 
 
-def summarize(path):
+def summarize(paths):
     samples = defaultdict(list)
-    with open(path, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            samples[row["label"]].append(row)
+    for path in paths:
+        with open(path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                samples[row["label"]].append(row)
 
     stats = {}
     for label, rows in samples.items():
@@ -64,6 +67,28 @@ def to_markdown(results):
     return "\n".join(lines)
 
 
+def comparison(results):
+    """P95 of the first run vs the last run for every request that appears in both."""
+    runs = list(results)
+    if len(runs) < 2:
+        return ""
+    first, last = results[runs[0]], results[runs[-1]]
+    lines = [
+        f"| Request | P95 {runs[0]} | P95 {runs[-1]} | Change |",
+        "|---|---:|---:|---|",
+    ]
+    for label in sorted(set(first) & set(last)):
+        before, after = first[label]["p95"], last[label]["p95"]
+        if after < before:
+            change = f"{before / max(after, 1):.0f}x faster"
+        elif after > before:
+            change = f"{(after - before) / max(before, 1) * 100:.0f}% slower"
+        else:
+            change = "no change"
+        lines.append(f"| {label} | {before} ms | {after} ms | {change} |")
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", action="append", required=True, help='"Name=path/to/results.jtl"')
@@ -72,10 +97,13 @@ def main():
 
     results = {}
     for item in args.run:
-        name, path = item.split("=", 1)
-        results[name] = summarize(path)
+        name, paths = item.split("=", 1)
+        results[name] = summarize(paths.split(","))
 
     report = "## JMeter results\n\n" + to_markdown(results) + "\n"
+    compare = comparison(results)
+    if compare:
+        report += "\n### Before vs after\n\n" + compare + "\n"
     failures = []
     for gate in args.gate:
         run, label, metric, limit = gate.rsplit(":", 3)
