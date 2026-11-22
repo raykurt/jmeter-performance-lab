@@ -32,6 +32,15 @@ public class PersonRepository {
         return rows.stream().findFirst();
     }
 
+    /** Write path: with an index on email, every insert also updates the index */
+    public Person insert(CreatePersonRequest request) {
+        return jdbc.queryForObject(
+                "INSERT INTO person (id, first_name, last_name, email, city, created_at) "
+                        + "VALUES (nextval('person_id_seq'), ?, ?, ?, ?, now()) RETURNING " + COLUMNS,
+                MAPPER,
+                request.firstName(), request.lastName(), request.email(), request.city());
+    }
+
     /** Slow without an index on email (full table scan), fast after sql/add-index.sql */
     public List<Person> findByEmail(String email) {
         return jdbc.query("SELECT " + COLUMNS + " FROM person WHERE email = ?", MAPPER, email);
