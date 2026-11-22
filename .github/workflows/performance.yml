@@ -8,7 +8,8 @@ on:
 
 env:
   JMETER_VERSION: 5.6.3
-  USERS: 10
+  READERS: 10
+  WRITERS: 5
   DURATION: 30
 
 jobs:
@@ -59,26 +60,33 @@ jobs:
           mkdir -p results reports
 
       - name: Warm-up run (results are not used)
-        run: jmeter -n -t jmeter/person-api-load.jmx -l results/warmup.jtl -Jusers=2 -Jduration=10
+        run: jmeter -n -t jmeter/person-api-load.jmx -l results/warmup.jtl -Jreaders=2 -Jwriters=1 -Jduration=10
 
-      - name: Load test BEFORE adding the index
-        run: jmeter -n -t jmeter/person-api-load.jmx -l results/before.jtl -e -o reports/before -Jusers=$USERS -Jduration=$DURATION
+      - name: Read test BEFORE adding the index
+        run: jmeter -n -t jmeter/person-api-load.jmx -l results/read-before.jtl -e -o reports/read-before -Jreaders=$READERS -Jwriters=0 -Jduration=$DURATION
+
+      - name: Write test BEFORE adding the index
+        run: jmeter -n -t jmeter/person-api-load.jmx -l results/write-before.jtl -e -o reports/write-before -Jreaders=0 -Jwriters=$WRITERS -Jduration=$DURATION
 
       - name: Add the index on person.email
         env:
           PGPASSWORD: perflab
         run: psql -h localhost -U perflab -d perflab -f sql/add-index.sql
 
-      - name: Load test AFTER adding the index
-        run: jmeter -n -t jmeter/person-api-load.jmx -l results/after.jtl -e -o reports/after -Jusers=$USERS -Jduration=$DURATION
+      - name: Read test AFTER adding the index
+        run: jmeter -n -t jmeter/person-api-load.jmx -l results/read-after.jtl -e -o reports/read-after -Jreaders=$READERS -Jwriters=0 -Jduration=$DURATION
+
+      - name: Write test AFTER adding the index
+        run: jmeter -n -t jmeter/person-api-load.jmx -l results/write-after.jtl -e -o reports/write-after -Jreaders=0 -Jwriters=$WRITERS -Jduration=$DURATION
 
       - name: Compare results and check the performance gate
         run: >
           python3 scripts/summarize.py
-          --run "Before index=results/before.jtl"
-          --run "After index=results/after.jtl"
+          --run "Before index=results/read-before.jtl,results/write-before.jtl"
+          --run "After index=results/read-after.jtl,results/write-after.jtl"
           --gate "After index:Search person by email:p95:200"
           --gate "After index:Get person by id:p95:200"
+          --gate "After index:Create person:p95:200"
 
       - name: Upload JMeter reports
         if: ${{ !cancelled() }}
