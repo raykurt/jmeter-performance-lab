@@ -20,4 +20,7 @@ SELECT g,
 FROM generate_series(1, 1000000) AS g
 WHERE NOT EXISTS (SELECT 1 FROM person);
 
+-- New rows created through POST /api/persons get ids after the seeded data
+CREATE SEQUENCE IF NOT EXISTS person_id_seq START WITH 1000001;
+
 ANALYZE person;
