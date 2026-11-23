@@ -7,7 +7,8 @@ Usage:
 
 A run can combine several .jtl files (comma separated), e.g. a read test and a write test.
 
-The gate fails the build (exit code 1) when the metric is above the limit in milliseconds.
+The gate fails the build (exit code 1) when the metric is above the limit
+(milliseconds for latencies, percent for error_pct).
 """
 import argparse
 import csv
@@ -92,7 +93,8 @@ def comparison(results):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", action="append", required=True, help='"Name=path/to/results.jtl"')
-    parser.add_argument("--gate", action="append", default=[], help='"Run:Request:metric:max_ms"')
+    parser.add_argument("--gate", action="append", default=[], help='"Run:Request:metric:limit"')
+    parser.add_argument("--title", default="JMeter results", help="heading of the report")
     args = parser.parse_args()
 
     results = {}
@@ -100,7 +102,7 @@ def main():
         name, paths = item.split("=", 1)
         results[name] = summarize(paths.split(","))
 
-    report = "## JMeter results\n\n" + to_markdown(results) + "\n"
+    report = f"## {args.title}\n\n" + to_markdown(results) + "\n"
     compare = comparison(results)
     if compare:
         report += "\n### Before vs after\n\n" + compare + "\n"
@@ -108,12 +110,13 @@ def main():
     for gate in args.gate:
         run, label, metric, limit = gate.rsplit(":", 3)
         value = results.get(run, {}).get(label, {}).get(metric)
+        unit = "%" if metric == "error_pct" else " ms"
         if value is None:
             failures.append(f"Gate '{gate}': no data")
         elif value > float(limit):
-            failures.append(f"Gate failed: {run} / {label} {metric} = {value} ms (limit {limit} ms)")
+            failures.append(f"Gate failed: {run} / {label} {metric} = {value:g}{unit} (limit {limit}{unit})")
         else:
-            report += f"\n✅ Gate passed: {run} / {label} {metric} = {value} ms (limit {limit} ms)"
+            report += f"\n✅ Gate passed: {run} / {label} {metric} = {value:g}{unit} (limit {limit}{unit})"
 
     for failure in failures:
         report += f"\n❌ {failure}"
