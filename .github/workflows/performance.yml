@@ -54,9 +54,26 @@ jobs:
           done
           echo "App did not start"; cat app.log; exit 1
 
-      - name: Install JMeter
+      - name: Cache JMeter
+        id: cache-jmeter
+        uses: actions/cache@v4
+        with:
+          path: apache-jmeter-${{ env.JMETER_VERSION }}
+          key: jmeter-${{ env.JMETER_VERSION }}
+
+      - name: Install JMeter (only when not cached)
+        if: steps.cache-jmeter.outputs.cache-hit != 'true'
+        timeout-minutes: 5
         run: |
-          curl -sSfL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" | tar xz
+          for url in \
+            "https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" \
+            "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz"; do
+            if curl -sSfL --retry 3 --connect-timeout 20 --max-time 180 "$url" -o jmeter.tgz; then break; fi
+          done
+          tar xzf jmeter.tgz
+
+      - name: Add JMeter to PATH
+        run: |
           echo "$PWD/apache-jmeter-${JMETER_VERSION}/bin" >> "$GITHUB_PATH"
           mkdir -p results reports
 
