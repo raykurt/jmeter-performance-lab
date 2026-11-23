@@ -10,6 +10,7 @@ env:
   JMETER_VERSION: 5.6.3
   READERS: 10
   WRITERS: 5
+  JOURNEY_USERS: 5
   DURATION: 30
 
 jobs:
@@ -79,6 +80,9 @@ jobs:
       - name: Write test AFTER adding the index
         run: jmeter -n -t jmeter/person-api-load.jmx -l results/write-after.jtl -e -o reports/write-after -Jreaders=0 -Jwriters=$WRITERS -Jduration=$DURATION
 
+      - name: User journey test (POST, then GET by the extracted id, then search)
+        run: jmeter -n -t jmeter/person-api-load.jmx -l results/journey.jtl -e -o reports/journey -Jreaders=0 -Jwriters=0 -Jjourney=$JOURNEY_USERS -Jduration=$DURATION
+
       - name: Compare results and check the performance gate
         run: >
           python3 scripts/summarize.py
@@ -87,6 +91,15 @@ jobs:
           --gate "After index:Search person by email:p95:200"
           --gate "After index:Get person by id:p95:200"
           --gate "After index:Create person:p95:200"
+
+      - name: Check the user journey
+        if: ${{ !cancelled() }}
+        run: >
+          python3 scripts/summarize.py
+          --title "User journey (after index)"
+          --run "Journey=results/journey.jtl"
+          --gate "Journey:User journey:p95:500"
+          --gate "Journey:User journey:error_pct:0"
 
       - name: Upload JMeter reports
         if: ${{ !cancelled() }}
